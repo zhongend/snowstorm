@@ -1,10 +1,14 @@
 <template>
-	<div id="app" :class="{portrait_view}" :style="{'--sidebar': getEffectiveSidebarWidth()+'px'}">
+	<div id="app" :class="{portrait_view, block_mode: mode == 'block'}" :style="{'--sidebar': getEffectiveSidebarWidth()+'px'}">
 
 		<div id="dialog_blackout" v-if="dialog" @click="closeDialog"></div>
 		<warning-dialog v-if="dialog == 'warnings'" @close="closeDialog"></warning-dialog>
 
         <header>
+			<div id="mode_switch">
+				<button :class="{selected: mode == 'block'}" @click="setMode('block')">积木编辑</button>
+				<button :class="{selected: mode == 'classic'}" @click="setMode('classic')">传统编辑</button>
+			</div>
 			<logo v-if="portrait_view" />
 			<menu-bar
 				:selected_tab="tab"
@@ -25,7 +29,10 @@
 		<help-panel v-if="is_help_panel_open || tab == 'help'" ref="help_panel" :portrait_view="portrait_view" @close="is_help_panel_open = false; portrait_view && setTab(previous_tab);"></help-panel>
 
 
+		<block-editor class="block_editor" v-show="mode == 'block' && (!portrait_view || tab != 'code' && tab != 'help')"></block-editor>
+
 		<div class="resizer"
+			v-show="mode == 'classic'"
 			:style="{ left: getEffectiveSidebarWidth() +'px', cursor: is_sidebar_open ? 'ew-resize' : 'default'}"
 			ref="sidebar_resizer" @mousedown="is_sidebar_open && resizeSidebarStart($event)">
 			<button class="resizer_toggle_button" v-show="!is_sidebar_open" @click="toggleSidebar" @mousedown.stop="">
@@ -33,7 +40,7 @@
 			</button>
 		</div>
 
-		<sidebar ref="sidebar" v-show="!portrait_view || tab == 'config'" :portrait_view="portrait_view" @open_help_page="openHelpPage"></sidebar>
+		<sidebar ref="sidebar" v-show="mode == 'classic' && (!portrait_view || tab == 'config')" :portrait_view="portrait_view" @open_help_page="openHelpPage"></sidebar>
 
 		<ul v-if="portrait_view" id="portrait_mode_selector">
         	<li class="mode_selector config" :class="{selected: tab == 'config'}" @click="setTab('config')"><SlidersHorizontal :size="22" /></li>
@@ -59,6 +66,9 @@ import vscode from '../vscode_extension';
 import {SlidersHorizontal, FileJson, Move3D, HelpCircle} from 'lucide-vue'
 import Logo from './Sidebar/Logo.vue';
 import {PanelLeftOpen} from "lucide-vue";
+import BlockEditor from '../block_editor/BlockEditor.vue'
+import { Synchronizer } from '../block_editor/synchronization/Synchronizer';
+import { updateInputsFromConfig } from '../import';
 
 if (!vscode) {
 	var startup_count = localStorage.getItem('snowstorm_startup_count') || 0;
@@ -99,7 +109,7 @@ export default {
 	name: 'app',
 	components: {
 		Preview, CodeViewer, MenuBar, Sidebar, HelpPanel, WarningDialog, ExpressionBar, InfoBox,
-		SlidersHorizontal, FileJson, Move3D, Logo, PanelLeftOpen, HelpCircle
+		SlidersHorizontal, FileJson, Move3D, Logo, PanelLeftOpen, HelpCircle, BlockEditor
 	},
 	data() {return {
 		code: '',
@@ -110,8 +120,33 @@ export default {
 		is_sidebar_open: getInitialIsSidebarOpen(),
 		is_help_panel_open: false,
 		portrait_view,
+		// 编辑模式：默认积木模式（可切回传统编辑，Config 全程共享）
+		mode: localStorage.getItem('snowstorm_edit_mode') || 'block',
 	}},
+	created() {
+		Synchronizer.setMode(this.mode);
+	},
 	methods: {
+		setMode(mode) {
+			if (this.mode == mode) return;
+			if (mode == 'classic') {
+				// Block → Classic：先把积木编译进 Config，再刷新传统输入框
+				Synchronizer.setMode('classic');
+				Synchronizer.compileNow();
+				updateInputsFromConfig();
+			} else {
+				// Classic → Block：从 Config 反编译生成积木
+				Synchronizer.setMode('block');
+				Vue.nextTick(() => {
+					Synchronizer.decompileFromConfig();
+				})
+			}
+			this.mode = mode;
+			localStorage.setItem('snowstorm_edit_mode', mode);
+			Vue.nextTick(() => {
+				this.$refs.preview && this.$refs.preview.updateSize();
+			})
+		},
 		setTab(tab) {
 			this.previous_tab = this.tab;
 			this.tab = tab
@@ -248,6 +283,45 @@ export default {
 	content {
 		grid-area: sidebar;
 		background-color: var(--color-interface);
+	}
+
+	/* 积木编辑模式：左侧大面积 Blockly Workspace，右侧仍是原版 Preview */
+	div#app.block_mode {
+		grid-template-columns: 62% 38%;
+		grid-template-areas: "blockbar header" "blockbar preview";
+	}
+	div#app.block_mode .block_editor {
+		grid-area: blockbar;
+		min-width: 0;
+		min-height: 0;
+		background: #f6f8fb;
+	}
+	div#app.portrait_view .block_editor {
+		grid-area: main;
+	}
+
+	/* 模式切换按钮 */
+	#mode_switch {
+		position: absolute;
+		right: 14px;
+		top: 8px;
+		z-index: 20;
+		display: flex;
+		gap: 6px;
+	}
+	#mode_switch button {
+		border: 1px solid var(--color-border);
+		background: var(--color-interface);
+		color: inherit;
+		border-radius: 8px;
+		padding: 4px 14px;
+		font-size: 13px;
+		cursor: pointer;
+	}
+	#mode_switch button.selected {
+		background: #4C97FF;
+		border-color: #4C97FF;
+		color: #ffffff;
 	}
 
 	/* Portrait View */

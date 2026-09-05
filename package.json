@@ -35,6 +35,7 @@
 		"webpack-dev-server": "^5.0.2"
 	},
 	"dependencies": {
+		"blockly": "^10.4.3",
 		"bootstrap": "^4.6.2",
 		"fflate": "^0.7.3",
 		"lucide-vue": "^0.298.0",

@@ -205,5 +205,6 @@ export {
 	importFile,
 	loadFile,
 	loadPreset,
-	startNewProject
+	startNewProject,
+	updateInputsFromConfig
 }

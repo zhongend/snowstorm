@@ -13,6 +13,18 @@
  */
 
 /**
+ * @license
+ * Copyright 2019 Google LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/**
+ * @license
+ * Copyright 2020 Google LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/**
  * @license lucide-vue v0.298.0 - ISC
  *
  * This source code is licensed under the ISC license.
