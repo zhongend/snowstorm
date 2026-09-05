@@ -136,6 +136,15 @@ npm run production  # 生产构建
 - 原项目：[JannisX11/snowstorm](https://github.com/JannisX11/snowstorm)，遵循 GPL-3.0 开源协议，感谢原作者的出色工作
 - 本 Fork 的全部改动集中在 `src/block_editor/`（约 10 个文件），对原版代码的修改控制在最小范围（`App.vue` 模式切换 + `import.js` 一处导出）
 
+## Contributors 贡献者
+
+| 贡献者 | 主要贡献 |
+| --- | --- |
+| [zhongend](https://github.com/zhongend) | 积木编辑器整体设计与实现（Blockly 工作区 / 编译器 / 反编译器 / Molang 层） |
+| [oldwu2333](https://github.com/oldwu2333)（隔壁的老吴鸦） | 项目协作者、需求与测试 |
+
+> 欢迎提交 Issue 和 PR！贡献者会自动出现在 GitHub 的 Contributors 列表中。
+
 ---
 
 # Snowstorm
