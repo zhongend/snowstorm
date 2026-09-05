@@ -1,3 +1,22 @@
 {
-    "/app.js": "/app.js"
+    "/app.js": "/app.js",
+    "/media/1x1.gif": "/media/1x1.gif",
+    "/media/click.mp3": "/media/click.mp3",
+    "/media/click.ogg": "/media/click.ogg",
+    "/media/click.wav": "/media/click.wav",
+    "/media/delete.mp3": "/media/delete.mp3",
+    "/media/delete.ogg": "/media/delete.ogg",
+    "/media/delete.wav": "/media/delete.wav",
+    "/media/disconnect.mp3": "/media/disconnect.mp3",
+    "/media/disconnect.ogg": "/media/disconnect.ogg",
+    "/media/disconnect.wav": "/media/disconnect.wav",
+    "/media/dropdown-arrow.svg": "/media/dropdown-arrow.svg",
+    "/media/handclosed.cur": "/media/handclosed.cur",
+    "/media/handdelete.cur": "/media/handdelete.cur",
+    "/media/handopen.cur": "/media/handopen.cur",
+    "/media/pilcrow.png": "/media/pilcrow.png",
+    "/media/quote0.png": "/media/quote0.png",
+    "/media/quote1.png": "/media/quote1.png",
+    "/media/sprites.png": "/media/sprites.png",
+    "/media/sprites.svg": "/media/sprites.svg"
 }

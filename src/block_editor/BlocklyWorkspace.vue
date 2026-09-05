@@ -23,6 +23,15 @@ import { Config } from '../emitter'
 import { generateFile } from '../export'
 import { loadFile } from '../import'
 
+// Blockly 图标资源基准路径：以加载的 app.js 所在目录为准（主站 dist/、VSCode 扩展目录均适用）
+function resolveMediaBase() {
+	try {
+		const script = document.querySelector('script[src$="app.js"]')
+		if (script && script.src) return new URL('media/', script.src).href
+	} catch (err) { /* 回退到页面相对路径 */ }
+	return 'dist/media/'
+}
+
 export default {
 	name: 'BlocklyWorkspace',
 	data() {
@@ -40,6 +49,7 @@ export default {
 		const theme = createTheme()
 
 		this.ws = Blockly.inject(this.$refs.host, {
+			media: resolveMediaBase(),
 			toolbox: buildToolbox(),
 			theme,
 			grid: { spacing: 28, length: 3, colour: '#d9dfe7', snap: true },

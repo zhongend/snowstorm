@@ -52,6 +52,10 @@ mix.webpackConfig({
 mix.js('src/app.js', 'dist/')
 	.vue()
 	.setPublicPath('dist')
+	// Blockly 图标/音效资源自托管：不传 media 选项时 Blockly 会指向
+	// blockly-demo.appspot.com（国内不可达），导致垃圾桶/缩放按钮图标损坏。
+	.copy('node_modules/blockly/media', 'dist/media')
 	.after(() => {
 		fs.copyFileSync('./dist/app.js', './vscode_extension/snowstorm/app.js')
+		fs.cpSync('./node_modules/blockly/media', './vscode_extension/snowstorm/media', {recursive: true})
 	});
