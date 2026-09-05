@@ -43,6 +43,10 @@ function valueInput(block, name, label, def, check = 'MolangNumber') {
 	input.setCheck(check)
 	if (def !== undefined && def !== null && check === 'MolangNumber') {
 		input.connection.setShadowState({ type: 'molang_number', fields: { NUM: def } })
+	} else {
+		// 无默认值的槽为"可选槽"：允许留空，校验时跳过
+		if (!block.beOptional) block.beOptional = []
+		block.beOptional.push(name)
 	}
 	return input
 }
@@ -429,18 +433,54 @@ defineModule({
 					.appendField(new Blockly.FieldTextInput('custom_material'), 'MATERIAL_CUSTOM')
 				this.appendDummyInput('FACING_ROW').appendField('朝向')
 					.appendField(new Blockly.FieldDropdown(FACING_OPTIONS), 'FACING')
+				this.appendDummyInput('DIR_MODE_ROW').appendField('方向来源')
+					.appendField(new Blockly.FieldDropdown([['跟随运动', 'derive_from_velocity'], ['自定义', 'custom']]), 'DIRECTION_MODE')
+				valueInput(this, 'DIR_X', '方向 X', 0)
+				valueInput(this, 'DIR_Y', 'Y', 0)
+				valueInput(this, 'DIR_Z', 'Z', 0)
+				valueInput(this, 'THRESHOLD', '最小速度', 0.01)
 				checkbox(this, 'LIGHT', '环境光照')
 				this.setPreviousStatement(true, 'Module')
 				this.setNextStatement(true, 'Module')
 				this.setStyle('appearance_block')
-				this.setTooltip('尺寸、材质、摄像头朝向、光照（particle_appearance_*）')
+				this.setTooltip('尺寸、材质、摄像头朝向、方向来源、光照（particle_appearance_*）')
 				this.updateShape_()
 			},
-			mutationToDom() { const c = document.createElement('mutation'); c.setAttribute('mat', this.getFieldValue('MATERIAL')); return c },
-			domToMutation(xml) { this.updateShape_(xml.getAttribute('mat')) },
-			updateShape_(mat = this.getFieldValue('MATERIAL')) {
-				const i = this.getInput('MAT_CUSTOM_ROW')
-				if (i) i.setVisible(mat === 'custom')
+			mutationToDom() {
+				const c = document.createElement('mutation')
+				c.setAttribute('mat', this.getFieldValue('MATERIAL'))
+				c.setAttribute('facing', this.getFieldValue('FACING'))
+				c.setAttribute('dir_mode', this.getFieldValue('DIRECTION_MODE'))
+				return c
+			},
+			domToMutation(xml) { this.updateShape_(xml.getAttribute('mat'), xml.getAttribute('facing'), xml.getAttribute('dir_mode')) },
+			updateShape_(mat = this.getFieldValue('MATERIAL'), facing = this.getFieldValue('FACING'), dirMode = this.getFieldValue('DIRECTION_MODE')) {
+				const customMat = this.getInput('MAT_CUSTOM_ROW')
+				if (customMat) customMat.setVisible(mat === 'custom')
+				// 仅在朝向依赖方向时显示（与原版 condition 一致）
+				const directionish = facing.startsWith('direction') || facing === 'lookat_direction'
+				const rows = {
+					DIR_MODE_ROW: directionish,
+					DIR_X: directionish && dirMode === 'custom',
+					DIR_Y: directionish && dirMode === 'custom',
+					DIR_Z: directionish && dirMode === 'custom',
+					THRESHOLD: directionish && dirMode === 'derive_from_velocity',
+				}
+				for (const [name, vis] of Object.entries(rows)) { const i = this.getInput(name); if (i) i.setVisible(vis) }
+			},
+			onchange() {
+				// 朝向/方向模式下拉变化时刷新可见性（mutation 之外的字段变化）
+				const facing = this.getFieldValue('FACING')
+				const dirMode = this.getFieldValue('DIRECTION_MODE')
+				const directionish = facing.startsWith('direction') || facing === 'lookat_direction'
+				const rows = {
+					DIR_MODE_ROW: directionish,
+					DIR_X: directionish && dirMode === 'custom',
+					DIR_Y: directionish && dirMode === 'custom',
+					DIR_Z: directionish && dirMode === 'custom',
+					THRESHOLD: directionish && dirMode === 'derive_from_velocity',
+				}
+				for (const [name, vis] of Object.entries(rows)) { const i = this.getInput(name); if (i) i.setVisible(vis) }
 			}
 		}
 	},
@@ -450,7 +490,18 @@ defineModule({
 		if (sx !== null || sy !== null) ctx.set('particle_appearance_size', [sx ?? 0.2, sy ?? 0.2])
 		const mat = block.getFieldValue('MATERIAL')
 		ctx.set('particle_appearance_material', mat === 'custom' ? (block.getFieldValue('MATERIAL_CUSTOM') || 'custom') : mat)
-		ctx.set('particle_appearance_facing_camera_mode', block.getFieldValue('FACING'))
+		const facing = block.getFieldValue('FACING')
+		ctx.set('particle_appearance_facing_camera_mode', facing)
+		if (facing.startsWith('direction') || facing === 'lookat_direction') {
+			const dirMode = block.getFieldValue('DIRECTION_MODE')
+			ctx.set('particle_appearance_direction_mode', dirMode)
+			if (dirMode === 'custom') {
+				const d = [v('DIR_X'), v('DIR_Y'), v('DIR_Z')]
+				if (d.some(x => x !== null)) ctx.set('particle_appearance_direction', d.map(x => x ?? 0))
+			} else {
+				if (v('THRESHOLD') !== null) ctx.set('particle_appearance_speed_threshold', v('THRESHOLD'))
+			}
+		}
 		ctx.set('particle_color_light', block.getFieldValue('LIGHT') === 'TRUE')
 	},
 	decompile(Config) {
@@ -459,15 +510,21 @@ defineModule({
 		if (size && size.length === 2) { inputs.SIZE_X = shadowValue(size[0]); inputs.SIZE_Y = shadowValue(size[1]) }
 		const mat = Config.particle_appearance_material || 'particles_blend'
 		const known = MATERIAL_OPTIONS.some(o => o[1] === mat)
-		return {
-			fields: {
-				MATERIAL: known ? mat : 'custom',
-				MATERIAL_CUSTOM: known ? 'custom_material' : mat,
-				FACING: Config.particle_appearance_facing_camera_mode || 'rotate_xyz',
-				LIGHT: Config.particle_color_light ? 'TRUE' : 'FALSE',
-			},
-			inputs,
+		const facing = Config.particle_appearance_facing_camera_mode || 'rotate_xyz'
+		const fields = {
+			MATERIAL: known ? mat : 'custom',
+			MATERIAL_CUSTOM: known ? 'custom_material' : mat,
+			FACING: facing,
+			LIGHT: Config.particle_color_light ? 'TRUE' : 'FALSE',
 		}
+		const directionish = facing.startsWith('direction') || facing === 'lookat_direction'
+		if (directionish) {
+			fields.DIRECTION_MODE = Config.particle_appearance_direction_mode || 'derive_from_velocity'
+			const dir = Config.particle_appearance_direction
+			if (dir && dir.length === 3) { inputs.DIR_X = shadowValue(dir[0]); inputs.DIR_Y = shadowValue(dir[1]); inputs.DIR_Z = shadowValue(dir[2]) }
+			if (Config.particle_appearance_speed_threshold !== undefined && Config.particle_appearance_speed_threshold !== null) inputs.THRESHOLD = shadowValue(Config.particle_appearance_speed_threshold)
+		}
+		return { fields, inputs }
 	},
 })
 
@@ -737,6 +794,304 @@ defineModule({
 			},
 			inputs: {},
 		}
+	},
+})
+
+// ---------------- 粒子寿命 ----------------
+defineModule({
+	type: 'particle_lifetime',
+	category: 'lifetime',
+	label: '粒子寿命',
+	register(Blockly) {
+		Blockly.Blocks.particle_lifetime = {
+			init() {
+				this.appendDummyInput().appendField('粒子寿命')
+				valueInput(this, 'MAX_AGE', '最大寿命 (秒)', 1)
+				valueInput(this, 'KILL_EXPR', '消亡条件 (Molang)')
+				this.appendDummyInput('KILL_PLANE_ROW').setAlign(Blockly.inputs.Align.RIGHT).appendField('击杀平面')
+					.appendField('a').appendField(new Blockly.FieldNumber(0), 'KILL_A')
+					.appendField('b').appendField(new Blockly.FieldNumber(0), 'KILL_B')
+					.appendField('c').appendField(new Blockly.FieldNumber(0), 'KILL_C')
+					.appendField('d').appendField(new Blockly.FieldNumber(0), 'KILL_D')
+				this.appendDummyInput('EXPIRE_IN_ROW').setAlign(Blockly.inputs.Align.RIGHT).appendField('触碰消失方块')
+					.appendField(new Blockly.FieldTextInput('minecraft:stone, minecraft:leaves'), 'EXPIRE_IN')
+				this.appendDummyInput('EXPIRE_OUT_ROW').setAlign(Blockly.inputs.Align.RIGHT).appendField('离开消失方块')
+					.appendField(new Blockly.FieldTextInput('minecraft:air'), 'EXPIRE_OUT')
+				this.setPreviousStatement(true, 'Module')
+				this.setNextStatement(true, 'Module')
+				this.setStyle('lifetime_block')
+				this.setTooltip('粒子生命周期（particle_lifetime_*）')
+			}
+		}
+	},
+	compile(block, ctx) {
+		const v = (n) => ctx.value(block, n)
+		if (v('MAX_AGE') !== null) ctx.set('particle_lifetime_max_lifetime', v('MAX_AGE'))
+		if (v('KILL_EXPR') !== null) ctx.set('particle_lifetime_expiration_expression', v('KILL_EXPR'))
+		const plane = [
+			parseFloat(block.getFieldValue('KILL_A')) || 0,
+			parseFloat(block.getFieldValue('KILL_B')) || 0,
+			parseFloat(block.getFieldValue('KILL_C')) || 0,
+			parseFloat(block.getFieldValue('KILL_D')) || 0,
+		]
+		if (plane.some(x => x !== 0)) ctx.set('particle_lifetime_kill_plane', plane)
+		const toList = (field) => (block.getFieldValue(field) || '').split(',').map(s => s.trim()).filter(s => s)
+		const inBlocks = toList('EXPIRE_IN')
+		const outBlocks = toList('EXPIRE_OUT')
+		if (inBlocks.length) ctx.set('particle_lifetime_expire_in', inBlocks)
+		if (outBlocks.length) ctx.set('particle_lifetime_expire_outside', outBlocks)
+	},
+	decompile(Config) {
+		const inputs = {}
+		if (Config.particle_lifetime_max_lifetime !== undefined && Config.particle_lifetime_max_lifetime !== null && Config.particle_lifetime_max_lifetime !== '') inputs.MAX_AGE = shadowValue(Config.particle_lifetime_max_lifetime)
+		if (Config.particle_lifetime_expiration_expression) inputs.KILL_EXPR = { block: molangToBlockJson(Config.particle_lifetime_expiration_expression) || { type: 'molang_raw', fields: { EXPR: Config.particle_lifetime_expiration_expression } } }
+		const fields = {}
+		const plane = Config.particle_lifetime_kill_plane
+		if (Array.isArray(plane)) {
+			fields.KILL_A = plane[0] || 0
+			fields.KILL_B = plane[1] || 0
+			fields.KILL_C = plane[2] || 0
+			fields.KILL_D = plane[3] || 0
+		}
+		const joinList = (v) => Array.isArray(v) ? v.join(', ') : (v || '')
+		if (Config.particle_lifetime_expire_in) fields.EXPIRE_IN = joinList(Config.particle_lifetime_expire_in)
+		if (Config.particle_lifetime_expire_outside) fields.EXPIRE_OUT = joinList(Config.particle_lifetime_expire_outside)
+		return { fields, inputs }
+	},
+})
+
+// 文本解析：'evt_a, evt_b' → ['evt_a','evt_b']；'0.0=evt_a\n0.5=evt_b' → {'0.0': ['evt_a'], ...}
+function splitIds(text) {
+	return (text || '').split(',').map(s => s.trim()).filter(s => s)
+}
+function parsePairs(text) {
+	const obj = {}
+	;(text || '').split(/\n|;/).map(s => s.trim()).filter(Boolean).forEach(pair => {
+		const m = pair.split('=')
+		if (m.length !== 2) return
+		const time = m[0].trim(), ids = splitIds(m[1])
+		if (!time || !ids.length) return
+		obj[time] = ids
+	})
+	return obj
+}
+function pairsToText(obj) {
+	if (!obj) return ''
+	return Object.keys(obj).map(time => {
+		const ids = Array.isArray(obj[time]) ? obj[time].join(', ') : String(obj[time])
+		return `${time}=${ids}`
+	}).join('\n')
+}
+
+// ---------------- 发射器事件触发 ----------------
+defineModule({
+	type: 'emitter_events',
+	category: 'events',
+	label: '发射器事件',
+	register(Blockly) {
+		Blockly.Blocks.emitter_events = {
+			init() {
+				this.appendDummyInput().appendField('发射器事件')
+				this.appendDummyInput('CR_ROW').setAlign(Blockly.inputs.Align.RIGHT).appendField('生成时')
+					.appendField(new Blockly.FieldTextInput('my_event'), 'CREATION')
+				this.appendDummyInput('EX_ROW').setAlign(Blockly.inputs.Align.RIGHT).appendField('结束时')
+					.appendField(new Blockly.FieldTextInput('my_event'), 'EXPIRATION')
+				this.appendDummyInput('TL_ROW').setAlign(Blockly.inputs.Align.RIGHT).appendField('时间线')
+					.appendField(new Blockly.FieldMultilineInput('0.0=my_event'), 'TIMELINE')
+				this.appendDummyInput('TD_ROW').setAlign(Blockly.inputs.Align.RIGHT).appendField('飞行距离')
+					.appendField(new Blockly.FieldMultilineInput('5=my_event'), 'TRAVEL')
+				this.setPreviousStatement(true, 'Module')
+				this.setNextStatement(true, 'Module')
+				this.setStyle('events_block')
+				this.setTooltip('发射器事件触发（minecraft:emitter_lifetime_events）。事件名用逗号分隔可触发多个；时间线每行一条：时间=事件名')
+			}
+		}
+	},
+	compile(block, ctx) {
+		const creation = splitIds(block.getFieldValue('CREATION'))
+		const expiration = splitIds(block.getFieldValue('EXPIRATION'))
+		if (creation.length) ctx.set('emitter_events_creation', creation)
+		if (expiration.length) ctx.set('emitter_events_expiration', expiration)
+		const timeline = parsePairs(block.getFieldValue('TIMELINE'))
+		if (Object.keys(timeline).length) ctx.set('emitter_events_timeline', timeline)
+		const travel = parsePairs(block.getFieldValue('TRAVEL'))
+		if (Object.keys(travel).length) ctx.set('emitter_events_distance', travel)
+	},
+	decompile(Config) {
+		const fields = {}
+		const cr = Config.emitter_events_creation
+		if (cr && (Array.isArray(cr) ? cr.length : String(cr).length)) fields.CREATION = Array.isArray(cr) ? cr.join(', ') : String(cr)
+		const ex = Config.emitter_events_expiration
+		if (ex && (Array.isArray(ex) ? ex.length : String(ex).length)) fields.EXPIRATION = Array.isArray(ex) ? ex.join(', ') : String(ex)
+		if (Config.emitter_events_timeline && Object.keys(Config.emitter_events_timeline).length) fields.TIMELINE = pairsToText(Config.emitter_events_timeline)
+		if (Config.emitter_events_distance && Object.keys(Config.emitter_events_distance).length) fields.TRAVEL = pairsToText(Config.emitter_events_distance)
+		return { fields, inputs: {} }
+	},
+})
+
+// ---------------- 粒子事件触发 ----------------
+defineModule({
+	type: 'particle_events',
+	category: 'events',
+	label: '粒子事件',
+	register(Blockly) {
+		Blockly.Blocks.particle_events = {
+			init() {
+				this.appendDummyInput().appendField('粒子事件')
+				this.appendDummyInput('CR_ROW').setAlign(Blockly.inputs.Align.RIGHT).appendField('生成时')
+					.appendField(new Blockly.FieldTextInput('my_event'), 'CREATION')
+				this.appendDummyInput('EX_ROW').setAlign(Blockly.inputs.Align.RIGHT).appendField('消失时')
+					.appendField(new Blockly.FieldTextInput('my_event'), 'EXPIRATION')
+				this.appendDummyInput('TL_ROW').setAlign(Blockly.inputs.Align.RIGHT).appendField('时间线')
+					.appendField(new Blockly.FieldMultilineInput('0.0=my_event'), 'TIMELINE')
+				this.setPreviousStatement(true, 'Module')
+				this.setNextStatement(true, 'Module')
+				this.setStyle('events_block')
+				this.setTooltip('粒子事件触发（minecraft:particle_lifetime_events）')
+			}
+		}
+	},
+	compile(block, ctx) {
+		const creation = splitIds(block.getFieldValue('CREATION'))
+		const expiration = splitIds(block.getFieldValue('EXPIRATION'))
+		if (creation.length) ctx.set('particle_events_creation', creation)
+		if (expiration.length) ctx.set('particle_events_expiration', expiration)
+		const timeline = parsePairs(block.getFieldValue('TIMELINE'))
+		if (Object.keys(timeline).length) ctx.set('particle_events_timeline', timeline)
+	},
+	decompile(Config) {
+		const fields = {}
+		const cr = Config.particle_events_creation
+		if (cr && (Array.isArray(cr) ? cr.length : String(cr).length)) fields.CREATION = Array.isArray(cr) ? cr.join(', ') : String(cr)
+		const ex = Config.particle_events_expiration
+		if (ex && (Array.isArray(ex) ? ex.length : String(ex).length)) fields.EXPIRATION = Array.isArray(ex) ? ex.join(', ') : String(ex)
+		if (Config.particle_events_timeline && Object.keys(Config.particle_events_timeline).length) fields.TIMELINE = pairsToText(Config.particle_events_timeline)
+		return { fields, inputs: {} }
+	},
+})
+
+// ---------------- 事件定义（顶层积木，三种动作） ----------------
+// 产物与 Snowstorm 事件编辑器一致：{particle_effect:{effect,type}} / {sound_effect:{event_name}} / {expression:'...'}
+defineModule({
+	type: 'event_spawn_particle',
+	category: 'events',
+	label: '事件：生成粒子',
+	topLevel: true,
+	register(Blockly) {
+		Blockly.Blocks.event_spawn_particle = {
+			init() {
+				this.appendDummyInput().appendField('事件：生成粒子')
+					.appendField(new Blockly.FieldTextInput('my_event'), 'ID')
+				this.appendDummyInput('EFF_ROW').setAlign(Blockly.inputs.Align.RIGHT).appendField('粒子效果')
+					.appendField(new Blockly.FieldTextInput('namespace:effect_name'), 'EFFECT')
+				this.appendDummyInput('TYPE_ROW').setAlign(Blockly.inputs.Align.RIGHT).appendField('类型')
+					.appendField(new Blockly.FieldDropdown([['发射器', 'emitter'], ['粒子', 'particle']]), 'TYPE')
+				this.setStyle('events_block')
+				this.setTooltip('定义一个事件：触发时生成粒子效果。把此积木放在工作区空白处，用触发积木（生成时/时间线等）按名字调用')
+			}
+		}
+	},
+	compile(block, ctx) {
+		const id = (block.getFieldValue('ID') || '').trim()
+		const effect = (block.getFieldValue('EFFECT') || '').trim()
+		if (!id || !effect) { ctx.warn(block, '事件：生成粒子 缺少事件名或效果名'); return }
+		ctx.event(id, { particle_effect: { effect, type: block.getFieldValue('TYPE') } })
+	},
+})
+
+defineModule({
+	type: 'event_play_sound',
+	category: 'events',
+	label: '事件：播放声音',
+	topLevel: true,
+	register(Blockly) {
+		Blockly.Blocks.event_play_sound = {
+			init() {
+				this.appendDummyInput().appendField('事件：播放声音')
+					.appendField(new Blockly.FieldTextInput('my_event'), 'ID')
+				this.appendDummyInput('SND_ROW').setAlign(Blockly.inputs.Align.RIGHT).appendField('声音')
+					.appendField(new Blockly.FieldTextInput('block.bamboo.hit'), 'SOUND')
+				this.setStyle('events_block')
+				this.setTooltip('定义一个事件：触发时播放声音')
+			}
+		}
+	},
+	compile(block, ctx) {
+		const id = (block.getFieldValue('ID') || '').trim()
+		const sound = (block.getFieldValue('SOUND') || '').trim()
+		if (!id || !sound) { ctx.warn(block, '事件：播放声音 缺少事件名或声音名'); return }
+		ctx.event(id, { sound_effect: { event_name: sound } })
+	},
+})
+
+defineModule({
+	type: 'event_run_expression',
+	category: 'events',
+	label: '事件：运行表达式',
+	topLevel: true,
+	register(Blockly) {
+		Blockly.Blocks.event_run_expression = {
+			init() {
+				this.appendDummyInput().appendField('事件：运行表达式')
+					.appendField(new Blockly.FieldTextInput('my_event'), 'ID')
+				this.appendDummyInput('EXPR_ROW').setAlign(Blockly.inputs.Align.RIGHT).appendField('Molang')
+					.appendField(new Blockly.FieldMultilineInput('variable.x = 1;'), 'EXPR')
+				this.setStyle('events_block')
+				this.setTooltip('定义一个事件：触发时运行 Molang 语句（每行一条）')
+			}
+		}
+	},
+	compile(block, ctx) {
+		const id = (block.getFieldValue('ID') || '').trim()
+		const expr = (block.getFieldValue('EXPR') || '').trim()
+		if (!id || !expr) { ctx.warn(block, '事件：运行表达式 缺少事件名或表达式'); return }
+		ctx.event(id, { expression: expr })
+	},
+})
+
+// ---------------- 高级逻辑（变量与表达式） ----------------
+defineModule({
+	type: 'advanced_logic',
+	category: 'advanced',
+	label: '高级逻辑',
+	register(Blockly) {
+		Blockly.Blocks.advanced_logic = {
+			init() {
+				this.appendDummyInput().appendField('高级逻辑')
+				this.appendDummyInput('SV_ROW').setAlign(Blockly.inputs.Align.RIGHT).appendField('初始变量')
+					.appendField(new Blockly.FieldMultilineInput('variable.size = 1;'), 'START_VARS')
+				this.appendDummyInput('TV_ROW').setAlign(Blockly.inputs.Align.RIGHT).appendField('每帧变量')
+					.appendField(new Blockly.FieldMultilineInput('variable.dist = variable.size*2;'), 'TICK_VARS')
+				this.appendDummyInput('PU_ROW').setAlign(Blockly.inputs.Align.RIGHT).appendField('粒子更新')
+					.appendField(new Blockly.FieldMultilineInput('variable.particle_x = variable.particle_x + 1;'), 'UPDATE_EXPR')
+				this.appendDummyInput('PR_ROW').setAlign(Blockly.inputs.Align.RIGHT).appendField('粒子渲染')
+					.appendField(new Blockly.FieldMultilineInput('variable.yaw = Math.atan2(variable.particle_velocity_x, variable.particle_velocity_z);'), 'RENDER_EXPR')
+				this.setPreviousStatement(true, 'Module')
+				this.setNextStatement(true, 'Module')
+				this.setStyle('variable_blocks')
+				this.setTooltip('自定义 Molang 变量与每帧更新/渲染表达式（variables_* / particle_update_expression / particle_render_expression）。每行一条语句')
+			}
+		}
+	},
+	compile(block, ctx) {
+		const toStatements = (field) => (block.getFieldValue(field) || '').split(/\n|;/).map(s => s.trim()).filter(s => s)
+		const startVars = toStatements('START_VARS')
+		const tickVars = toStatements('TICK_VARS')
+		const updateExpr = toStatements('UPDATE_EXPR')
+		const renderExpr = toStatements('RENDER_EXPR')
+		if (startVars.length) ctx.set('variables_creation_vars', startVars)
+		if (tickVars.length) ctx.set('variables_tick_vars', tickVars)
+		if (updateExpr.length) ctx.set('particle_update_expression', updateExpr)
+		if (renderExpr.length) ctx.set('particle_render_expression', renderExpr)
+	},
+	decompile(Config) {
+		const joinStatements = (v) => Array.isArray(v) ? v.join(';\n') : (v || '')
+		const fields = {}
+		if (Config.variables_creation_vars && Config.variables_creation_vars.length) fields.START_VARS = joinStatements(Config.variables_creation_vars)
+		if (Config.variables_tick_vars && Config.variables_tick_vars.length) fields.TICK_VARS = joinStatements(Config.variables_tick_vars)
+		if (Config.particle_update_expression && Config.particle_update_expression.length) fields.UPDATE_EXPR = joinStatements(Config.particle_update_expression)
+		if (Config.particle_render_expression && Config.particle_render_expression.length) fields.RENDER_EXPR = joinStatements(Config.particle_render_expression)
+		return { fields, inputs: {} }
 	},
 })
 

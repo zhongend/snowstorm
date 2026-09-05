@@ -30,6 +30,8 @@ export function createTheme() {
 			texture_block:    { colourPrimary: CATEGORY_COLORS.texture },
 			collision_block:  { colourPrimary: CATEGORY_COLORS.collision },
 			space_block:      { colourPrimary: CATEGORY_COLORS.space },
+			events_block:     { colourPrimary: '#E5565B' },
+			curve_block:      { colourPrimary: '#F2C94C' },
 			math_block:       { colourPrimary: '#4C97FF' },
 			molang_block:     { colourPrimary: '#59C059' },
 			molang_fn_block:  { colourPrimary: '#40BF4E' },

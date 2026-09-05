@@ -78,6 +78,41 @@ export function buildToolbox() {
 				],
 			},
 			{
+				kind: 'category', name: '寿命', colour: '#0FBD8C',
+				contents: [
+					moduleFlyout('particle_lifetime', { MAX_AGE: shadowNum(1) }, { EXPIRE_IN: 'minecraft:stone', EXPIRE_OUT: 'minecraft:air' }),
+				],
+			},
+			{
+				kind: 'category', name: '事件', colour: '#E5565B',
+				contents: [
+					moduleFlyout('emitter_events', {}, { CREATION: 'my_event', EXPIRATION: '', TIMELINE: '0.0=my_event', TRAVEL: '5=my_event' }),
+					moduleFlyout('particle_events', {}, { CREATION: 'my_event', EXPIRATION: '', TIMELINE: '0.0=my_event' }),
+					moduleFlyout('event_spawn_particle', {}, { ID: 'my_event', EFFECT: 'namespace:effect_name', TYPE: 'emitter' }),
+					moduleFlyout('event_play_sound', {}, { ID: 'my_event', SOUND: 'block.bamboo.hit' }),
+					moduleFlyout('event_run_expression', {}, { ID: 'my_event', EXPR: 'variable.x = 1;' }),
+				],
+			},
+			{
+				kind: 'category', name: '曲线', colour: '#F2C94C',
+				contents: [
+					{
+						kind: 'block', type: 'molang_curve',
+						fields: { NAME: 'variable.my_curve', MODE: 'catmull_rom', NODES: '0, 1, 0' },
+						inputs: {
+							INPUT: { shadow: { type: 'molang_var', fields: { VAR: 'variable.particle_age' } } },
+							RANGE: { shadow: { type: 'molang_var', fields: { VAR: 'variable.particle_lifetime' } } },
+						},
+					},
+				],
+			},
+			{
+				kind: 'category', name: '高级', colour: '#8a8a8a',
+				contents: [
+					moduleFlyout('advanced_logic', {}, { START_VARS: 'variable.size = 1;', TICK_VARS: '', UPDATE_EXPR: '', RENDER_EXPR: '' }),
+				],
+			},
+			{
 				kind: 'category', name: 'Molang 变量', colour: '#FF8C1A',
 				contents: [
 					{ kind: 'block', type: 'molang_var' },
@@ -113,13 +148,21 @@ const MODULE_KEYWORDS = [
 	{ name: '发射器', type: 'emitter_rate', kw: '发射 rate 速率 amount maximum steady instant rate emitter' },
 	{ name: '发射器寿命', type: 'emitter_lifetime', kw: '发射器寿命 looping once active sleep lifetime 循环 单次' },
 	{ name: '发射形状', type: 'emitter_shape', kw: '形状 shape sphere box disc 球 立方 圆盘 半径 offset surface' },
+	{ name: '粒子寿命', type: 'particle_lifetime', kw: '粒子寿命 max age kill plane 消亡 击杀平面 expire blocks 方块 消失 lifetime' },
 	{ name: '运动', type: 'motion', kw: '运动 速度 speed acceleration 加速 drag 阻力 motion dynamic parametric 方向' },
 	{ name: '旋转', type: 'rotation', kw: '旋转 rotation spin 转动 rate' },
-	{ name: '外观', type: 'appearance', kw: '外观 size 尺寸 material 材质 facing 朝向 billboard camera light 光照' },
+	{ name: '外观', type: 'appearance', kw: '外观 size 尺寸 material 材质 facing 朝向 billboard camera light 光照 direction 方向 threshold' },
 	{ name: '颜色', type: 'color', kw: '颜色 color colour gradient 渐变 static expression alpha' },
 	{ name: '材质/UV', type: 'texture_uv', kw: 'uv texture 材质 贴图 flipbook 帧率 fps step 步进 frame' },
 	{ name: '碰撞', type: 'collision', kw: '碰撞 collision bounce 弹性 阻力 expire 消失 radius' },
 	{ name: '粒子空间', type: 'particle_space', kw: '空间 space local position rotation velocity 相对' },
+	{ name: '发射器事件', type: 'emitter_events', kw: '事件 event timeline 时间线 creation expiration 生成 结束 距离 trigger 触发 emitter' },
+	{ name: '粒子事件', type: 'particle_events', kw: '事件 event timeline 时间线 creation expiration 消失 触发 particle' },
+	{ name: '事件：生成粒子', type: 'event_spawn_particle', kw: '事件 定义 event spawn particle effect 生成 粒子 定义' },
+	{ name: '事件：播放声音', type: 'event_play_sound', kw: '事件 定义 event sound 声音 播放 sound_effect' },
+	{ name: '事件：运行表达式', type: 'event_run_expression', kw: '事件 定义 event expression molang 运行 表达式' },
+	{ name: '曲线', type: 'molang_curve', kw: '曲线 curve linear bezier catmull nodes 节点 插值 插帧' },
+	{ name: '高级逻辑', type: 'advanced_logic', kw: '变量 variable 高级 update render 每帧 更新 渲染 初始化 tick' },
 	{ name: '数字', type: 'molang_number', kw: '数字 number 数值' },
 	{ name: 'Molang 原始表达式', type: 'molang_raw', kw: 'molang raw 原始 表达式' },
 	{ name: 'Molang 变量', type: 'molang_var', kw: '变量 variable age age lifetime random particle emitter' },

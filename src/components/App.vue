@@ -5,16 +5,14 @@
 		<warning-dialog v-if="dialog == 'warnings'" @close="closeDialog"></warning-dialog>
 
         <header>
-			<div id="mode_switch">
-				<button :class="{selected: mode == 'block'}" @click="setMode('block')">积木编辑</button>
-				<button :class="{selected: mode == 'classic'}" @click="setMode('classic')">传统编辑</button>
-			</div>
 			<logo v-if="portrait_view" />
 			<menu-bar
 				:selected_tab="tab"
 				:portrait_view="portrait_view"
+				:mode="mode"
 				:is_help_panel_open="portrait_view ? tab == 'help' : is_help_panel_open"
 				@changetab="setTab"
+				@changemode="setMode"
 				@opendialog="openDialog"
 				@open_help_page="openHelpPage"
 			></menu-bar>
@@ -124,6 +122,10 @@ export default {
 		mode: localStorage.getItem('snowstorm_edit_mode') || 'block',
 	}},
 	created() {
+		// VSCode 扩展环境不显示积木模式
+		if (vscode) {
+			this.mode = 'classic';
+		}
 		Synchronizer.setMode(this.mode);
 	},
 	methods: {
@@ -285,10 +287,10 @@ export default {
 		background-color: var(--color-interface);
 	}
 
-	/* 积木编辑模式：左侧大面积 Blockly Workspace，右侧仍是原版 Preview */
+	/* 积木编辑模式：顶栏横跨全宽，下方左侧 Blockly、右侧原版 Preview */
 	div#app.block_mode {
 		grid-template-columns: 62% 38%;
-		grid-template-areas: "blockbar header" "blockbar preview";
+		grid-template-areas: "header header" "blockbar preview";
 	}
 	div#app.block_mode .block_editor {
 		grid-area: blockbar;
@@ -300,29 +302,7 @@ export default {
 		grid-area: main;
 	}
 
-	/* 模式切换按钮 */
-	#mode_switch {
-		position: absolute;
-		right: 14px;
-		top: 8px;
-		z-index: 20;
-		display: flex;
-		gap: 6px;
-	}
-	#mode_switch button {
-		border: 1px solid var(--color-border);
-		background: var(--color-interface);
-		color: inherit;
-		border-radius: 8px;
-		padding: 4px 14px;
-		font-size: 13px;
-		cursor: pointer;
-	}
-	#mode_switch button.selected {
-		background: #4C97FF;
-		border-color: #4C97FF;
-		color: #ffffff;
-	}
+	/* 模式切换：MenuBar 内的原生菜单项（.block_mode），不再使用悬浮按钮 */
 
 	/* Portrait View */
 	div#app.portrait_view {

@@ -14,6 +14,8 @@
         	<li class="mode_selector" @click="openCodeViewer(false)" title="Open as Code View">Switch to Code</li>
 		</template>
 		<template v-else-if="!portrait_view">
+			<li class="mode_selector block_mode" :class="{selected: mode == 'block'}" @click="$emit('changemode', 'block')">积木编辑</li>
+			<li class="mode_selector block_mode" :class="{selected: mode == 'classic'}" @click="$emit('changemode', 'classic')">传统编辑</li>
         	<li class="mode_selector code" :class="{selected: selected_tab == 'code'}" @click="$emit('changetab', 'code')">Code</li>
         	<li class="mode_selector preview" :class="{selected: selected_tab == 'preview'}" @click="$emit('changetab', 'preview')">Preview</li>
 		</template>
@@ -119,7 +121,8 @@ export default {
     props: {
         selected_tab: String,
         portrait_view: Boolean,
-		is_help_panel_open: Boolean
+		is_help_panel_open: Boolean,
+		mode: String
     },
     methods: {
         changeTab() {

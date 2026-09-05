@@ -67,6 +67,24 @@ export function registerMolangBlocks(Blockly) {
 		tooltip: 'Molang 三元条件 cond ? a : b',
 	}])
 
+	// 曲线积木：编译时注册进 Config.curves，输出变量名供其他槽引用
+	Blockly.Blocks.molang_curve = {
+		init() {
+			this.appendDummyInput().appendField('曲线')
+				.appendField(new Blockly.FieldTextInput('variable.my_curve'), 'NAME')
+				.appendField(new Blockly.FieldDropdown([
+					['线性', 'linear'], ['Catmull Rom', 'catmull_rom'], ['贝塞尔', 'bezier'],
+				]), 'MODE')
+				.appendField('节点')
+				.appendField(new Blockly.FieldTextInput('0, 1, 0'), 'NODES')
+			this.appendValueInput('INPUT').setAlign(Blockly.inputs.Align.RIGHT).appendField('输入').setCheck(MOLANG_CHECK)
+			this.appendValueInput('RANGE').setAlign(Blockly.inputs.Align.RIGHT).appendField('范围').setCheck(MOLANG_CHECK)
+			this.setOutput(true, MOLANG_CHECK)
+			this.setStyle('curve_block')
+			this.setTooltip('定义一条曲线并输出其变量名。节点为逗号分隔的数值；输入/范围是把横向进度映射到节点的 Molang（默认 粒子年龄 / 粒子寿命）')
+		}
+	}
+
 	// 函数积木：数据驱动生成（含 30 个 easing）
 	for (const fn of MolangFunctions) {
 		const type = 'molang_fn_' + sanitized(fn.name)
@@ -84,6 +102,27 @@ export function registerMolangBlocks(Blockly) {
 		}
 	}
 }
+
+// 曲线积木 → {name, config}；非法时返回 {error}
+export function curveBlockToConfig(block, evalInput) {
+	const name = (block.getFieldValue('NAME') || '').trim()
+	const mode = block.getFieldValue('MODE')
+	const nodes = (block.getFieldValue('NODES') || '').split(',').map(s => parseFloat(s)).filter(n => isFinite(n))
+	if (!name.startsWith('variable.')) return { error: `曲线名 "${name}" 必须以 variable. 开头` }
+	const minNodes = mode === 'bezier' ? 4 : 2
+	if (nodes.length < minNodes) return { error: `曲线 "${name}" 至少需要 ${minNodes} 个节点数值` }
+	return {
+		name,
+		config: {
+			mode,
+			input: evalInput ? evalInput('INPUT') : 'variable.particle_age',
+			range: evalInput ? evalInput('RANGE') : 'variable.particle_lifetime',
+			nodes,
+		},
+	}
+}
+
+export function molangCurveType() { return 'molang_curve' }
 
 // ---------- 编译：积木 → Molang 字符串 ----------
 // evalInput(name) 由 BlockCompiler 提供：取输入槽内积木的表达式（或 shadow 字段值）
